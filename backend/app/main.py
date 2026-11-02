@@ -1,0 +1,66 @@
+from contextlib import asynccontextmanager
+
+from fastapi import FastAPI, HTTPException
+from fastapi.exceptions import RequestValidationError
+from fastapi.staticfiles import StaticFiles
+from app.config import UPLOAD_DIR
+
+from app.models.user import User
+from app.models.lab import Lab
+from app.models.equipment import Equipment
+from app.database import Base
+from app.database import engine, Base
+from app.api import api
+from starlette.middleware.cors import CORSMiddleware
+from app.models.reservation import Reservation
+from app.common.exception import (
+    BusinessException,
+    bussiness_exception_hadler,
+    http_exception_hadler,
+    global_exception_hadler,
+    validation_exception_hadler,
+)
+import asyncio
+from app.services import reservation_service
+
+Base.metadata.create_all(bind=engine)
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    task = asyncio.create_task(
+        reservation_service.run_expire_scan()
+    )  # 启动项目开启异步的扫描任务
+    yield
+    task.cancel()  # 关闭项目同时取消异步任务
+
+
+app = FastAPI(lifespan=lifespan)
+app = FastAPI()
+
+origins = ["http://localhost:5173", "http://127.0.0.1:5173"]
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=origins,  # 允许的前端源，不要直接写["*"]
+    allow_credentials=True,  # 关键： 允许前端携带 Authorization token
+    allow_methods=["*"],  # 允许所有请求方法 GET POST PUT DELETE OPTIONS
+    allow_headers=["*"],  # 允许所有请求头 (包含Authorization)
+)
+
+app.include_router(api)
+
+# 注册异常
+app.add_exception_handler(BusinessException, bussiness_exception_hadler)
+app.add_exception_handler(HTTPException, http_exception_hadler)
+app.add_exception_handler(RequestValidationError, validation_exception_hadler)
+# 全局异常兜底，必须放在最后注册
+app.add_exception_handler(Exception, global_exception_hadler)
+
+# 挂载静态的文件目录
+app.mount("/uploads", StaticFiles(directory=UPLOAD_DIR), name="uploads")
+
+
+@app.get("/")
+def root():
+    return {"message": "Hello, World!"}

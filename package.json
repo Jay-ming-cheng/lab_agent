@@ -1,0 +1,7 @@
+{
+  "dependencies": {
+    "@element-plus/icons-vue": "^2.3.2",
+    "dompurify": "^3.4.17",
+    "marked": "^18.1.1"
+  }
+}
